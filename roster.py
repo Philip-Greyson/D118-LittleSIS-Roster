@@ -1,8 +1,12 @@
 # Script to export all classes for students in the current year
+# Exports the class info, teacher email, etc one per line into a csv
+# Then uploads the csv to the LittleSIS SFTP server for import
 
 # See the following for table information
 # https://docs.powerschool.com/PSDD/powerschool-tables/cc-4-ver3-6-1
 # https://docs.powerschool.com/PSDD/powerschool-tables/terms-13-ver3-6-1
+# https://docs.powerschool.com/PSDD/powerschool-tables/courses-2-ver3-6-1
+# https://docs.powerschool.com/PSDD/powerschool-tables/sections-3-ver3-6-1
 
 # importing module
 import oracledb #used to connect to PowerSchool database
@@ -118,7 +122,6 @@ with oracledb.connect(user=un, password=pw, dsn=cs) as con: # create the connect
                 print('SFTP connection established', file=log)
                 print(sftp.pwd) # debug to list current working directory
                 print(sftp.listdir())  # debug to list files and directory in current directory
-
-                # sftp.put('pmschedules.txt') #upload the file onto the sftp server
-                print("Schedule file placed on remote server")
-                print("Schedule file placed on remote server", file=log)
+                sftp.put('littlesis_roster.csv') #upload the file onto the sftp server
+                print("Roster file placed on remote server")
+                print("Roster file placed on remote server", file=log)
