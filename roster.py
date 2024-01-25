@@ -40,6 +40,7 @@ print(f"SFTP Username: {SFTP_UN} | SFTP Password: {SFTP_PW} | SFTP Server: {SFTP
 
 OUTPUT_FILE_NAME = 'littlesis_roster.csv'
 EMAIL_SUFFIX = '@d118.org'
+TERMYEAR_SCHOOL_NUMBER = 5
 
 if __name__ == '__main__':  # main file execution
     with open('roster_log.txt', 'w') as log:  # open logging file
@@ -58,7 +59,7 @@ if __name__ == '__main__':  # main file execution
                         # print("today = " + str(today)) #debug
 
                         # find the term year for the current school year by looking at all terms in whatever building and comparing the terms start and end dates to today's date to find a valid term and store the term year for later
-                        cur.execute("SELECT id, firstday, lastday, schoolid, yearid FROM terms WHERE IsYearRec = 1 AND schoolid = 5 ORDER BY dcid DESC")  # get a list of terms for a building, filtering to only full years
+                        cur.execute("SELECT id, firstday, lastday, schoolid, yearid FROM terms WHERE IsYearRec = 1 AND schoolid = :school ORDER BY dcid DESC", school=TERMYEAR_SCHOOL_NUMBER)  # get a list of terms for a building, filtering to only full years
                         termRows = cur.fetchall()
                         for term in termRows:
                             if term[1] < today and term[2] > today:
@@ -82,7 +83,8 @@ if __name__ == '__main__':  # main file execution
                                 stuEmail = idNum + EMAIL_SUFFIX  # append email suffix to their student ID to get email
 
                                 try:
-                                    cur.execute('SELECT id, dcid FROM terms where yearid = :year AND schoolid = :school', year=termyear, school=schoolID)  # using bind variables as best practice https://python-oracledb.readthedocs.io/en/latest/user_guide/bind.html#bind
+                                    # find terms for the current student in the termyear found initially
+                                    cur.execute('SELECT id, dcid FROM terms WHERE yearid = :year AND schoolid = :school', year=termyear, school=schoolID)  # using bind variables as best practice https://python-oracledb.readthedocs.io/en/latest/user_guide/bind.html#bind
                                     termRows = cur.fetchall()
                                     for term in termRows:
                                         termID = str(term[0])
@@ -95,7 +97,7 @@ if __name__ == '__main__':  # main file execution
                                             courseRows = cur.fetchall()
                                             for course in courseRows:
                                                 # print(course)
-                                                print(course, file=log)
+                                                # print(course, file=log)
                                                 courseNum = str(course[0])
                                                 sectionNum = str(course[1])
                                                 courseTerm = str(course[2])
@@ -114,7 +116,7 @@ if __name__ == '__main__':  # main file execution
 
                                                 cur.execute("SELECT email_addr FROM teachers WHERE users_dcid = :teacherDCID", teacherDCID=teacherDCID)  # get the teacher number from the teachers table for that user dcid
                                                 teacherInfo = cur.fetchall()
-                                                print(teacherInfo, file=log)  # debug
+                                                # print(teacherInfo, file=log)  # debug
                                                 teacherEmail = str(teacherInfo[0][0])  # just get the result directly without converting to list or doing loop
 
                                                 cur.execute("SELECT room FROM sections WHERE id = :sectionID", sectionID=courseSectionID)  # get the room number assigned to the sectionid correlating to our home_room
@@ -143,8 +145,14 @@ if __name__ == '__main__':  # main file execution
                 # print(sftp.pwd)  # debug to list current working directory
                 # print(sftp.listdir())  # debug to list files and directory in current directory
                 sftp.put(OUTPUT_FILE_NAME)  # upload the file onto the sftp server
-                print("Roster file placed on remote server")
-                print("Roster file placed on remote server", file=log)
+                print("INFO: Roster file placed on remote server")
+                print("INFO: Roster file placed on remote server", file=log)
         except Exception as er:
             print(f'ERROR while connecting or uploading to LittleSIS SFTP server: {er}')
             print(f'ERROR while connecting or uploading to LittleSIS SFTP server: {er}', file=log)
+
+        endTime = datetime.now()
+        endTime = endTime.strftime('%H:%M:%S')
+        print(f'INFO: Execution ended at {endTime}')
+        print(f'INFO: Execution ended at {endTime}', file=log)
+
