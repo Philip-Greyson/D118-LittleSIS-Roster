@@ -17,7 +17,7 @@ https://ps.powerschool-docs.com/pssis-data-dictionary/latest/sections-3-ver3-6-1
 """
 
 # importing module
-import datetime  # used to get current date for course info
+import datetime as dt # used to get current date for course info
 import os  # needed to get environement variables
 from datetime import *
 
@@ -62,8 +62,10 @@ if __name__ == '__main__':  # main file execution
                         cur.execute("SELECT id, firstday, lastday, schoolid, yearid FROM terms WHERE IsYearRec = 1 AND schoolid = :school ORDER BY dcid DESC", school=TERMYEAR_SCHOOL_NUMBER)  # get a list of terms for a building, filtering to only full years
                         termRows = cur.fetchall()
                         for term in termRows:
-                            if term[1] < today and term[2] > today:
-                                termyear = str(term[4])  # store the yearid as the term year we really look for in each student
+                            print(f'DBUG: Found term {term}', file=log)  # debug to see the terms
+                            if term[1] < today and (term[2] + dt.timedelta(days=60)) > today:  # add two months past the end date to cover for the summer
+                                termyear = str(term[4])  # store the yearid as the term year we really look for in each student 
+                                print(f'DBUG: Term year is set to {termyear}', file=log)
 
                         print('CC.COURSE_NUMBER,CC.SECTION_NUMBER,CC.TERMID,CC.SCHOOLID,CC.EXPRESSION,CC.DATEENROLLED,CC.DATELEFT,COURSES.COURSE_NAME,SECTIONS.ROOM,TEACHERS.EMAIL_ADDR,U_STUDENTSUSERFIELDS.custom_student_email,STUDENTS.STUDENT_NUMBER,STUDENTS.ENTRYDATE,STUDENTS.EXITDATE,STUDENTS.ENROLL_STATUS,SCHOOLS.ABBREVIATION', file=output)  # print the header rows into the output file
                         # do a query for active students, get their enroll infor as well as the school abbreviation
