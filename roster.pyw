@@ -19,6 +19,7 @@ https://ps.powerschool-docs.com/pssis-data-dictionary/latest/sections-3-ver3-6-1
 # importing module
 import datetime as dt # used to get current date for course info
 import os  # needed to get environement variables
+import sys
 from datetime import *
 
 import oracledb  # used to connect to PowerSchool database
@@ -35,8 +36,8 @@ SFTP_HOST = os.environ.get('LITTLESIS_SFTP_ADDRESS')
 CNOPTS = pysftp.CnOpts(knownhosts='known_hosts')  # connection options to use the known_hosts file for key validation
 
 
-print(f"Username: {DB_UN} | Password: {DB_PW} | Server: {DB_CS}")  # debug so we can see where oracle is trying to connect to/with
-print(f"SFTP Username: {SFTP_UN} | SFTP Password: {SFTP_PW} | SFTP Server: {SFTP_HOST}")  # debug so we can see where pysftp is trying to connect to/with
+print(f"DBUG: Username: {DB_UN} | Password: {DB_PW} | Server: {DB_CS}")  # debug so we can see where oracle is trying to connect to/with
+print(f"DBUG: SFTP Username: {SFTP_UN} | SFTP Password: {SFTP_PW} | SFTP Server: {SFTP_HOST}")  # debug so we can see where pysftp is trying to connect to/with
 
 OUTPUT_FILE_NAME = 'littlesis_roster.csv'
 EMAIL_SUFFIX = '@d118.org'
@@ -63,79 +64,85 @@ if __name__ == '__main__':  # main file execution
                         termRows = cur.fetchall()
                         for term in termRows:
                             print(f'DBUG: Found term {term}', file=log)  # debug to see the terms
-                            if term[1] < today and (term[2] + dt.timedelta(days=60)) > today:  # add two months past the end date to cover for the summer
-                                termyear = str(term[4])  # store the yearid as the term year we really look for in each student 
+                            if (term[1] - dt.timedelta(days=30) < today) and term[2] > today:  # add two months past the end date to cover for the summer
+                                termyear = str(term[4])  # store the yearid as the term year we really look for in each student
+                                print(f'DBUG: Term year is set to {termyear}') 
                                 print(f'DBUG: Term year is set to {termyear}', file=log)
 
-                        print('CC.COURSE_NUMBER,CC.SECTION_NUMBER,CC.TERMID,CC.SCHOOLID,CC.EXPRESSION,CC.DATEENROLLED,CC.DATELEFT,COURSES.COURSE_NAME,SECTIONS.ROOM,TEACHERS.EMAIL_ADDR,U_STUDENTSUSERFIELDS.custom_student_email,STUDENTS.STUDENT_NUMBER,STUDENTS.ENTRYDATE,STUDENTS.EXITDATE,STUDENTS.ENROLL_STATUS,SCHOOLS.ABBREVIATION', file=output)  # print the header rows into the output file
-                        # do a query for active students, get their enroll infor as well as the school abbreviation
-                        cur.execute('SELECT students.student_number, students.entrydate, students.exitdate, students.enroll_status, students.schoolid, schools.abbreviation, students.id FROM students LEFT JOIN schools on students.schoolid = schools.school_number WHERE students.enroll_status = 0')
-                        studentRows = cur.fetchall()
-                        for student in studentRows:
-                            try:
-                                print(f'DBUG: Starting student {student[0]} at building {student[4]} - {student[5]}, enroll status {student[3]}')  # debug
-                                print(f'DBUG: Starting student {student[0]} at building {student[4]} - {student[5]}, enroll status {student[3]}', file=log)  # debug
-                                idNum = str(int(student[0]))
-                                stuEntry = student[1].strftime('%Y-%m-%d')  # convert the full datetime value to just yyyy-mm-dd
-                                stuExit = student[2].strftime('%Y-%m-%d')  # convert the full datetime value to just yyyy-mm-dd
-                                stuEnroll = str(student[3])
-                                schoolID = str(student[4])
-                                school = str(student[5])
-                                internalID = str(student[6])
-                                stuEmail = idNum + EMAIL_SUFFIX  # append email suffix to their student ID to get email
-
+                        if termyear:
+                            print('CC.COURSE_NUMBER,CC.SECTION_NUMBER,CC.TERMID,CC.SCHOOLID,CC.EXPRESSION,CC.DATEENROLLED,CC.DATELEFT,COURSES.COURSE_NAME,SECTIONS.ROOM,TEACHERS.EMAIL_ADDR,U_STUDENTSUSERFIELDS.custom_student_email,STUDENTS.STUDENT_NUMBER,STUDENTS.ENTRYDATE,STUDENTS.EXITDATE,STUDENTS.ENROLL_STATUS,SCHOOLS.ABBREVIATION', file=output)  # print the header rows into the output file
+                            # do a query for active students, get their enroll infor as well as the school abbreviation
+                            cur.execute('SELECT students.student_number, students.entrydate, students.exitdate, students.enroll_status, students.schoolid, schools.abbreviation, students.id FROM students LEFT JOIN schools on students.schoolid = schools.school_number WHERE students.enroll_status = 0')
+                            studentRows = cur.fetchall()
+                            for student in studentRows:
                                 try:
-                                    # find terms for the current student in the termyear found initially
-                                    cur.execute('SELECT id, dcid FROM terms WHERE yearid = :year AND schoolid = :school', year=termyear, school=schoolID)  # using bind variables as best practice https://python-oracledb.readthedocs.io/en/latest/user_guide/bind.html#bind
-                                    termRows = cur.fetchall()
-                                    for term in termRows:
-                                        termID = str(term[0])
-                                        termDCID = str(term[1])
-                                        print(f'DBUG: {idNum} has good term for school {schoolID}: {termID} | {termDCID}')
-                                        print(f'DBUG: {idNum} has good term for school {schoolID}: {termID} | {termDCID}', file=log)
-                                        # now for each term that is valid, do a query for all their courses and start processing them
-                                        try:
-                                            cur.execute('SELECT cc.course_number, cc.section_number, cc.termid, cc.schoolid, cc.expression, cc.dateenrolled, cc.dateleft, cc.teacherid, cc.sectionid, courses.course_name FROM cc LEFT JOIN courses ON cc.course_number = courses.course_number WHERE cc.termid = :term AND cc.studentid = :internalID', term=termID, internalID=internalID)
-                                            courseRows = cur.fetchall()
-                                            for course in courseRows:
-                                                # print(course)
-                                                # print(course, file=log)
-                                                courseNum = str(course[0])
-                                                sectionNum = str(course[1])
-                                                courseTerm = str(course[2])
-                                                courseSchool = str(course[3])
-                                                courseExpression = str(course[4])
-                                                courseEnrolled = course[5].strftime('%Y-%m-%d')  # convert the full datetime value to just yyyy-mm-dd
-                                                courseLeft = course[6].strftime('%Y-%m-%d')  # convert the full datetime value to just yyyy-mm-dd
-                                                courseTeacherID = str(course[7])
-                                                courseSectionID = str(course[8])
-                                                courseName = str(course[9])
+                                    print(f'DBUG: Starting student {student[0]} at building {student[4]} - {student[5]}, enroll status {student[3]}')  # debug
+                                    print(f'DBUG: Starting student {student[0]} at building {student[4]} - {student[5]}, enroll status {student[3]}', file=log)  # debug
+                                    idNum = str(int(student[0]))
+                                    stuEntry = student[1].strftime('%Y-%m-%d')  # convert the full datetime value to just yyyy-mm-dd
+                                    stuExit = student[2].strftime('%Y-%m-%d')  # convert the full datetime value to just yyyy-mm-dd
+                                    stuEnroll = str(student[3])
+                                    schoolID = str(student[4])
+                                    school = str(student[5])
+                                    internalID = str(student[6])
+                                    stuEmail = idNum + EMAIL_SUFFIX  # append email suffix to their student ID to get email
 
-                                                cur.execute("SELECT users_dcid FROM schoolstaff WHERE id = :teacherID", teacherID=courseTeacherID)  # get the user dcid from the teacherid in schoolstaff
-                                                schoolStaffInfo = cur.fetchall()
-                                                # print(schoolStaffInfo, file=log) # debug
-                                                teacherDCID = str(schoolStaffInfo[0][0])  # just get the result directly without converting to list or doing loop
+                                    try:
+                                        # find terms for the current student in the termyear found initially
+                                        cur.execute('SELECT id, dcid FROM terms WHERE yearid = :year AND schoolid = :school', year=termyear, school=schoolID)  # using bind variables as best practice https://python-oracledb.readthedocs.io/en/latest/user_guide/bind.html#bind
+                                        termRows = cur.fetchall()
+                                        for term in termRows:
+                                            termID = str(term[0])
+                                            termDCID = str(term[1])
+                                            print(f'DBUG: {idNum} has good term for school {schoolID}: {termID} | {termDCID}')
+                                            print(f'DBUG: {idNum} has good term for school {schoolID}: {termID} | {termDCID}', file=log)
+                                            # now for each term that is valid, do a query for all their courses and start processing them
+                                            try:
+                                                cur.execute('SELECT cc.course_number, cc.section_number, cc.termid, cc.schoolid, cc.expression, cc.dateenrolled, cc.dateleft, cc.teacherid, cc.sectionid, courses.course_name FROM cc LEFT JOIN courses ON cc.course_number = courses.course_number WHERE cc.termid = :term AND cc.studentid = :internalID', term=termID, internalID=internalID)
+                                                courseRows = cur.fetchall()
+                                                for course in courseRows:
+                                                    # print(course)
+                                                    # print(course, file=log)
+                                                    courseNum = str(course[0])
+                                                    sectionNum = str(course[1])
+                                                    courseTerm = str(course[2])
+                                                    courseSchool = str(course[3])
+                                                    courseExpression = str(course[4])
+                                                    courseEnrolled = course[5].strftime('%Y-%m-%d')  # convert the full datetime value to just yyyy-mm-dd
+                                                    courseLeft = course[6].strftime('%Y-%m-%d')  # convert the full datetime value to just yyyy-mm-dd
+                                                    courseTeacherID = str(course[7])
+                                                    courseSectionID = str(course[8])
+                                                    courseName = str(course[9])
 
-                                                cur.execute("SELECT email_addr FROM teachers WHERE users_dcid = :teacherDCID", teacherDCID=teacherDCID)  # get the teacher number from the teachers table for that user dcid
-                                                teacherInfo = cur.fetchall()
-                                                # print(teacherInfo, file=log)  # debug
-                                                teacherEmail = str(teacherInfo[0][0])  # just get the result directly without converting to list or doing loop
+                                                    cur.execute("SELECT users_dcid FROM schoolstaff WHERE id = :teacherID", teacherID=courseTeacherID)  # get the user dcid from the teacherid in schoolstaff
+                                                    schoolStaffInfo = cur.fetchall()
+                                                    # print(schoolStaffInfo, file=log) # debug
+                                                    teacherDCID = str(schoolStaffInfo[0][0])  # just get the result directly without converting to list or doing loop
 
-                                                cur.execute("SELECT room FROM sections WHERE id = :sectionID", sectionID=courseSectionID)  # get the room number assigned to the sectionid correlating to our home_room
-                                                roomRows = cur.fetchall()
-                                                roomNumber = str(roomRows[0][0])
-                                                if(teacherEmail != 'None'):  # some attendance/commons classes do not have teachers listed, we dont want to print them
-                                                    print(f'{courseNum},{sectionNum},{courseTerm},{courseSchool},{courseExpression},{courseEnrolled},{courseLeft},{courseName},{roomNumber},{teacherEmail},{stuEmail},{idNum},{stuEntry},{stuExit},{stuEnroll},{school}', file=output)
+                                                    cur.execute("SELECT email_addr FROM teachers WHERE users_dcid = :teacherDCID", teacherDCID=teacherDCID)  # get the teacher number from the teachers table for that user dcid
+                                                    teacherInfo = cur.fetchall()
+                                                    # print(teacherInfo, file=log)  # debug
+                                                    teacherEmail = str(teacherInfo[0][0])  # just get the result directly without converting to list or doing loop
 
-                                        except Exception as er:
-                                            print(f'ERROR while processing courses for student {idNum}: {er}')
-                                            print(f'ERROR while processing courses for student {idNum}: {er}', file=log)
+                                                    cur.execute("SELECT room FROM sections WHERE id = :sectionID", sectionID=courseSectionID)  # get the room number assigned to the sectionid correlating to our home_room
+                                                    roomRows = cur.fetchall()
+                                                    roomNumber = str(roomRows[0][0])
+                                                    if(teacherEmail != 'None'):  # some attendance/commons classes do not have teachers listed, we dont want to print them
+                                                        print(f'{courseNum},{sectionNum},{courseTerm},{courseSchool},{courseExpression},{courseEnrolled},{courseLeft},{courseName},{roomNumber},{teacherEmail},{stuEmail},{idNum},{stuEntry},{stuExit},{stuEnroll},{school}', file=output)
+
+                                            except Exception as er:
+                                                print(f'ERROR while processing courses for student {idNum}: {er}')
+                                                print(f'ERROR while processing courses for student {idNum}: {er}', file=log)
+                                    except Exception as er:
+                                        print(f'ERROR while finding term for student {student[0]}: {er}')
+                                        print(f'ERROR while finding term for student {student[0]}: {er}', file=log)
                                 except Exception as er:
-                                    print(f'ERROR while finding term for student {student[0]}: {er}')
-                                    print(f'ERROR while finding term for student {student[0]}: {er}', file=log)
-                            except Exception as er:
-                                print(f'ERROR while processing student {student[0]}: {er}')
-                                print(f'ERROR while processing student {student[0]}: {er}', file=log)
+                                    print(f'ERROR while processing student {student[0]}: {er}')
+                                    print(f'ERROR while processing student {student[0]}: {er}', file=log)
+                        else:
+                            print(f'ERROR: Could not find a valid term for todays date of {today}, ending execution')
+                            print(f'ERROR: Could not find a valid term for todays date of {today}, ending execution', file=log)
+                            sys.exit()
             except Exception as er:
                 print(f'ERROR while doing initial PowerSchool query or file handling: {er}')
                 print(f'ERROR while doing initial PowerSchool query or file handling: {er}', file=log)
