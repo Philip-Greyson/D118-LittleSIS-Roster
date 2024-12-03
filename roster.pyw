@@ -148,7 +148,7 @@ if __name__ == '__main__':  # main file execution
                 print(f'ERROR while doing initial PowerSchool query or file handling: {er}', file=log)
         try:
             #after all the files are done writing and now closed, open an sftp connection to the server and place the file on there
-            with pysftp.Connection(SFTP_HOST, username=SFTP_UN, password=SFTP_PW, cnopts=CNOPTS) as sftp:
+            with pysftp.Connection(SFTP_HOST, username=SFTP_UN, password=SFTP_PW, cnopts=CNOPTS, port=2225) as sftp:
                 print(f'INFO: SFTP connection to LittleSIS at {SFTP_HOST} successfully established')
                 print(f'INFO: SFTP connection to LittleSIS at {SFTP_HOST} successfully established', file=log)
                 # print(sftp.pwd)  # debug to list current working directory
