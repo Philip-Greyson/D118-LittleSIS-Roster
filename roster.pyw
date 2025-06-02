@@ -62,6 +62,7 @@ if __name__ == '__main__':  # main file execution
                         # find the term year for the current school year by looking at all terms in whatever building and comparing the terms start and end dates to today's date to find a valid term and store the term year for later
                         cur.execute("SELECT id, firstday, lastday, schoolid, yearid FROM terms WHERE IsYearRec = 1 AND schoolid = :school ORDER BY dcid DESC", school=TERMYEAR_SCHOOL_NUMBER)  # get a list of terms for a building, filtering to only full years
                         termRows = cur.fetchall()
+                        termyear = None
                         for term in termRows:
                             print(f'DBUG: Found term {term}', file=log)  # debug to see the terms
                             if (term[1] - dt.timedelta(days=30) < today) and term[2] > today:  # add two months past the end date to cover for the summer
@@ -140,8 +141,8 @@ if __name__ == '__main__':  # main file execution
                                     print(f'ERROR while processing student {student[0]}: {er}')
                                     print(f'ERROR while processing student {student[0]}: {er}', file=log)
                         else:
-                            print(f'ERROR: Could not find a valid term for todays date of {today}, ending execution')
-                            print(f'ERROR: Could not find a valid term for todays date of {today}, ending execution', file=log)
+                            print(f'WARN: Could not find a valid term for todays date of {today}, ending execution')
+                            print(f'WARN: Could not find a valid term for todays date of {today}, ending execution', file=log)
                             sys.exit()
             except Exception as er:
                 print(f'ERROR while doing initial PowerSchool query or file handling: {er}')
